@@ -336,36 +336,58 @@ export const firestoreService = {
   async migrateLocalDataToCloud(uid: string): Promise<void> {
     const migrationFlagKey = `fittrack_cloud_migrated_${uid}`;
     try {
-      console.log(`[Migration] Checking local records to migrate to Firestore for UID: ${uid}...`);
+      if (localStorage.getItem(migrationFlagKey) === 'true') {
+        console.log(`[Migration] Local data migration already completed for UID: ${uid}`);
+        return;
+      }
+
+      console.log(`[Migration] Verifying local records to migrate to Firestore for UID: ${uid}...`);
 
       // 1. Migrate Local Habits
       const localHabits = await db.habits.where('user_id').equals(uid).toArray();
       if (localHabits.length > 0) {
         for (const h of localHabits) {
           const docRef = doc(firestoreDb, 'users', uid, 'habits', h.id);
-          await setDoc(docRef, h, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, h, { merge: true }).catch((err) =>
+              console.warn('[Migration] Habit upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localHabits.length} habits to Firestore`);
+        console.log(`[Migration] Checked ${localHabits.length} habits for cloud sync`);
       }
 
       // 2. Migrate Local Habit Completions
       const localComps = await db.habitCompletions.where('user_id').equals(uid).toArray();
       if (localComps.length > 0) {
         for (const c of localComps) {
-          const docRef = doc(firestoreDb, 'users', uid, 'habitCompletions', c.id);
-          await setDoc(docRef, c, { merge: true }).catch(() => {});
+          const compDocId = `comp_${c.habit_id}_${c.date}`;
+          const docRef = doc(firestoreDb, 'users', uid, 'habitCompletions', compDocId);
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, { ...c, id: compDocId }, { merge: true }).catch((err) =>
+              console.warn('[Migration] Completion upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localComps.length} completions to Firestore`);
+        console.log(`[Migration] Checked ${localComps.length} completions for cloud sync`);
       }
 
       // 3. Migrate Local Workout Plans
       const localPlans = await db.workoutPlans.where('user_id').equals(uid).toArray();
       if (localPlans.length > 0) {
         for (const p of localPlans) {
-          const docRef = doc(firestoreDb, 'users', uid, 'workoutPlans', p.id);
-          await setDoc(docRef, p, { merge: true }).catch(() => {});
+          const planDocId = `wp_day_${p.day_of_week}`;
+          const docRef = doc(firestoreDb, 'users', uid, 'workoutPlans', planDocId);
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, { ...p, id: planDocId }, { merge: true }).catch((err) =>
+              console.warn('[Migration] Plan upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localPlans.length} workout plans to Firestore`);
+        console.log(`[Migration] Checked ${localPlans.length} workout plans for cloud sync`);
       }
 
       // 4. Migrate Local Workout Logs
@@ -373,17 +395,26 @@ export const firestoreService = {
       if (localLogs.length > 0) {
         for (const l of localLogs) {
           const docRef = doc(firestoreDb, 'users', uid, 'workoutLogs', l.id);
-          await setDoc(docRef, l, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, l, { merge: true }).catch((err) =>
+              console.warn('[Migration] Log upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localLogs.length} workout logs to Firestore`);
+        console.log(`[Migration] Checked ${localLogs.length} workout logs for cloud sync`);
       }
 
       // 5. Migrate Local Nutrition Goal
       const localGoal = await db.nutritionGoals.where('user_id').equals(uid).first();
       if (localGoal) {
-        const docRef = doc(firestoreDb, 'users', uid, 'nutritionGoals', localGoal.id || 'default_goal');
-        await setDoc(docRef, localGoal, { merge: true }).catch(() => {});
-        console.log(`[Migration] Migrated nutrition goal to Firestore`);
+        const docRef = doc(firestoreDb, 'users', uid, 'nutritionGoals', 'current_goal');
+        const snap = await getDoc(docRef).catch(() => null);
+        if (!snap || !snap.exists()) {
+          await setDoc(docRef, { ...localGoal, id: 'current_goal' }, { merge: true }).catch((err) =>
+            console.warn('[Migration] Nutrition goal upload error:', err)
+          );
+        }
       }
 
       // 6. Migrate Local Meal Entries
@@ -391,9 +422,14 @@ export const firestoreService = {
       if (localMeals.length > 0) {
         for (const m of localMeals) {
           const docRef = doc(firestoreDb, 'users', uid, 'mealEntries', m.id);
-          await setDoc(docRef, m, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, m, { merge: true }).catch((err) =>
+              console.warn('[Migration] Meal upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localMeals.length} meal entries to Firestore`);
+        console.log(`[Migration] Checked ${localMeals.length} meal entries for cloud sync`);
       }
 
       // 7. Migrate Local Progress Entries
@@ -401,9 +437,14 @@ export const firestoreService = {
       if (localProg.length > 0) {
         for (const p of localProg) {
           const docRef = doc(firestoreDb, 'users', uid, 'progressEntries', p.id);
-          await setDoc(docRef, p, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, p, { merge: true }).catch((err) =>
+              console.warn('[Migration] Progress upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localProg.length} progress entries to Firestore`);
+        console.log(`[Migration] Checked ${localProg.length} progress entries for cloud sync`);
       }
 
       // 8. Migrate Local Goals
@@ -411,9 +452,14 @@ export const firestoreService = {
       if (localGoals.length > 0) {
         for (const g of localGoals) {
           const docRef = doc(firestoreDb, 'users', uid, 'goals', g.id);
-          await setDoc(docRef, g, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, g, { merge: true }).catch((err) =>
+              console.warn('[Migration] Goal upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localGoals.length} goals to Firestore`);
+        console.log(`[Migration] Checked ${localGoals.length} goals for cloud sync`);
       }
 
       // 9. Migrate Local Calendar Notes
@@ -421,9 +467,14 @@ export const firestoreService = {
       if (localNotes.length > 0) {
         for (const n of localNotes) {
           const docRef = doc(firestoreDb, 'users', uid, 'calendarNotes', n.id);
-          await setDoc(docRef, n, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, n, { merge: true }).catch((err) =>
+              console.warn('[Migration] Note upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localNotes.length} calendar notes to Firestore`);
+        console.log(`[Migration] Checked ${localNotes.length} calendar notes for cloud sync`);
       }
 
       // 10. Migrate Local Focus Deadlines
@@ -431,14 +482,19 @@ export const firestoreService = {
       if (localDeadlines.length > 0) {
         for (const d of localDeadlines) {
           const docRef = doc(firestoreDb, 'users', uid, 'focusDeadlines', d.id);
-          await setDoc(docRef, d, { merge: true }).catch(() => {});
+          const snap = await getDoc(docRef).catch(() => null);
+          if (!snap || !snap.exists()) {
+            await setDoc(docRef, d, { merge: true }).catch((err) =>
+              console.warn('[Migration] Deadline upload error:', err)
+            );
+          }
         }
-        console.log(`[Migration] Migrated ${localDeadlines.length} focus deadlines to Firestore`);
+        console.log(`[Migration] Checked ${localDeadlines.length} focus deadlines for cloud sync`);
       }
 
       localStorage.setItem(migrationFlagKey, 'true');
     } catch (err) {
-      console.warn('[Migration] Error during local data migration:', err);
+      console.warn('[Migration] Notice during cloud verification:', err);
     }
   },
 
@@ -508,31 +564,76 @@ export const firestoreService = {
   },
 
   async toggleCompletion(uid: string, habitId: string, dateStr: string): Promise<boolean> {
-    const colRef = this.getUserCol(uid, 'habitCompletions');
-    const q = query(colRef, where('habit_id', '==', habitId), where('date', '==', dateStr));
-    const snap = await getDocs(q);
+    const compDocId = `comp_${habitId}_${dateStr}`;
+    const docRef = doc(firestoreDb, 'users', uid, 'habitCompletions', compDocId);
 
-    if (snap && !snap.empty) {
-      const existingDoc = snap.docs[0];
-      const newStatus = !existingDoc.data().completed;
-      await updateDoc(doc(firestoreDb, 'users', uid, 'habitCompletions', existingDoc.id), {
-        completed: newStatus,
-      });
-      await db.habitCompletions.update(existingDoc.id, { completed: newStatus }).catch(() => {});
+    try {
+      const snap = await getDoc(docRef);
+      let newStatus = true;
+      if (snap && snap.exists()) {
+        newStatus = !snap.data().completed;
+        await setDoc(
+          docRef,
+          {
+            id: compDocId,
+            user_id: uid,
+            habit_id: habitId,
+            date: dateStr,
+            completed: newStatus,
+            updated_at: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } else {
+        const newComp: HabitCompletion = {
+          id: compDocId,
+          user_id: uid,
+          habit_id: habitId,
+          date: dateStr,
+          completed: true,
+          created_at: new Date().toISOString(),
+        };
+        await setDoc(docRef, newComp);
+      }
+
+      // Also mirror to local Dexie
+      const localExisting = await db.habitCompletions
+        .where({ user_id: uid, habit_id: habitId, date: dateStr })
+        .first();
+      if (localExisting) {
+        await db.habitCompletions.update(localExisting.id, { completed: newStatus });
+      } else {
+        await db.habitCompletions.put({
+          id: compDocId,
+          user_id: uid,
+          habit_id: habitId,
+          date: dateStr,
+          completed: newStatus,
+          created_at: new Date().toISOString(),
+        });
+      }
+
       return newStatus;
-    } else {
-      const compId = 'hbc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-      const newComp: HabitCompletion = {
-        id: compId,
-        user_id: uid,
-        habit_id: habitId,
-        date: dateStr,
-        completed: true,
-        created_at: new Date().toISOString(),
-      };
-      await setDoc(doc(firestoreDb, 'users', uid, 'habitCompletions', compId), newComp);
-      await db.habitCompletions.put(newComp).catch(() => {});
-      return true;
+    } catch (err) {
+      console.warn('[Firestore] toggleCompletion notice, using resilient local fallback:', err);
+      const localExisting = await db.habitCompletions
+        .where({ user_id: uid, habit_id: habitId, date: dateStr })
+        .first();
+      let localStatus = true;
+      if (localExisting) {
+        localStatus = !localExisting.completed;
+        await db.habitCompletions.update(localExisting.id, { completed: localStatus });
+      } else {
+        await db.habitCompletions.put({
+          id: compDocId,
+          user_id: uid,
+          habit_id: habitId,
+          date: dateStr,
+          completed: true,
+          created_at: new Date().toISOString(),
+        });
+      }
+      return localStatus;
     }
   },
 
@@ -569,7 +670,7 @@ export const firestoreService = {
     exercises: WorkoutPlan['exercises'],
     planId?: string
   ): Promise<WorkoutPlan> {
-    const docId = planId || `wp_${uid}_day_${dayOfWeek}`;
+    const docId = planId || `wp_day_${dayOfWeek}`;
     const planData: WorkoutPlan = {
       id: docId,
       user_id: uid,
@@ -646,7 +747,7 @@ export const firestoreService = {
     uid: string,
     goals: { calories: number; protein: number; carbs: number; fats: number }
   ): Promise<NutritionGoal> {
-    const docId = `ng_${uid}`;
+    const docId = 'current_goal';
     const data: NutritionGoal = {
       id: docId,
       user_id: uid,
@@ -713,23 +814,17 @@ export const firestoreService = {
   },
 
   async addProgressEntry(uid: string, entry: Omit<ProgressEntry, 'id' | 'created_at'>): Promise<ProgressEntry> {
-    const colRef = this.getUserCol(uid, 'progressEntries');
-    const q = query(colRef, where('date', '==', entry.date));
-    const snap = await getDocs(q);
+    const docId = `pe_${entry.date}`;
+    const docRef = doc(firestoreDb, 'users', uid, 'progressEntries', docId);
 
-    let docId: string;
-    let fullData: ProgressEntry;
+    const fullData: ProgressEntry = {
+      id: docId,
+      ...entry,
+      user_id: uid,
+      created_at: new Date().toISOString(),
+    };
 
-    if (snap && !snap.empty) {
-      docId = snap.docs[0].id;
-      fullData = { id: docId, created_at: snap.docs[0].data().created_at || new Date().toISOString(), ...entry };
-      await updateDoc(doc(firestoreDb, 'users', uid, 'progressEntries', docId), entry);
-    } else {
-      docId = 'pe_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-      fullData = { id: docId, ...entry, user_id: uid, created_at: new Date().toISOString() };
-      await setDoc(doc(firestoreDb, 'users', uid, 'progressEntries', docId), fullData);
-    }
-
+    await setDoc(docRef, fullData, { merge: true });
     await db.progressEntries.put(fullData).catch(() => {});
     return fullData;
   },

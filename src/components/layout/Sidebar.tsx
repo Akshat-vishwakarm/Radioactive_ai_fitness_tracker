@@ -29,8 +29,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
             alt="Radioactive"
             onError={(e) => {
               const target = e.currentTarget;
-              if (target.src !== '/radioactive-logo.jpg') {
+              if (!target.src.includes('radioactive-logo.png') && !target.src.includes('radioactive-logo.jpg')) {
+                target.src = '/radioactive-logo.png';
+              } else if (target.src.includes('radioactive-logo.png')) {
                 target.src = '/radioactive-logo.jpg';
+              } else {
+                target.onerror = null;
               }
             }}
             className="w-7 h-7 rounded object-contain bg-white border border-outline-variant shrink-0"

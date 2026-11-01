@@ -49,8 +49,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLocalGuestLogin }) =
             alt="Radioactive Logo"
             onError={(e) => {
               const target = e.currentTarget;
-              if (target.src !== '/radioactive-logo.jpg') {
+              if (!target.src.includes('radioactive-logo.png') && !target.src.includes('radioactive-logo.jpg')) {
+                target.src = '/radioactive-logo.png';
+              } else if (target.src.includes('radioactive-logo.png')) {
                 target.src = '/radioactive-logo.jpg';
+              } else {
+                target.onerror = null;
               }
             }}
             className="w-16 h-16 rounded-xl object-contain bg-white border border-outline p-1.5 shadow-sm"

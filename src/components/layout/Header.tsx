@@ -30,8 +30,12 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             alt="Radioactive"
             onError={(e) => {
               const target = e.currentTarget;
-              if (target.src !== '/radioactive-logo.jpg') {
+              if (!target.src.includes('radioactive-logo.png') && !target.src.includes('radioactive-logo.jpg')) {
+                target.src = '/radioactive-logo.png';
+              } else if (target.src.includes('radioactive-logo.png')) {
                 target.src = '/radioactive-logo.jpg';
+              } else {
+                target.onerror = null;
               }
             }}
             className="w-6 h-6 rounded object-contain bg-white border border-outline-variant shrink-0"

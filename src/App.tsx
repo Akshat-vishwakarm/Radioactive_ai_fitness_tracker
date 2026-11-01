@@ -30,8 +30,12 @@ const MainLayout: React.FC = () => {
             alt="Radioactive"
             onError={(e) => {
               const target = e.currentTarget;
-              if (target.src !== '/radioactive-logo.jpg') {
+              if (!target.src.includes('radioactive-logo.png') && !target.src.includes('radioactive-logo.jpg')) {
+                target.src = '/radioactive-logo.png';
+              } else if (target.src.includes('radioactive-logo.png')) {
                 target.src = '/radioactive-logo.jpg';
+              } else {
+                target.onerror = null;
               }
             }}
             className="w-10 h-10 rounded-lg object-contain bg-white border border-outline-variant p-1 animate-pulse"
@@ -117,8 +121,12 @@ const AuthGuard: React.FC = () => {
             alt="Radioactive"
             onError={(e) => {
               const target = e.currentTarget;
-              if (target.src !== '/radioactive-logo.jpg') {
+              if (!target.src.includes('radioactive-logo.png') && !target.src.includes('radioactive-logo.jpg')) {
+                target.src = '/radioactive-logo.png';
+              } else if (target.src.includes('radioactive-logo.png')) {
                 target.src = '/radioactive-logo.jpg';
+              } else {
+                target.onerror = null;
               }
             }}
             className="w-10 h-10 rounded-lg object-contain bg-white border border-outline-variant p-1 animate-pulse"
