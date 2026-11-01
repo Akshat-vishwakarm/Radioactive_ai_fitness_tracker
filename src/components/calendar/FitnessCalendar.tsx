@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
-import { calendarNoteService } from '../../services/calendarNoteService';
 import { progressService } from '../../services/progressService';
 import type { CalendarNote } from '../../types';
 
 export const FitnessCalendar: React.FC = () => {
   const { currentUser } = useAuth();
-  const { workoutLogs, allMeals, habits, completionsMap, refreshData } = useData();
+  const {
+    workoutLogs,
+    allMeals,
+    habits,
+    completionsMap,
+    calendarNotes,
+    saveCalendarNote,
+    deleteCalendarNote,
+    refreshData,
+  } = useData();
 
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [notes, setNotes] = useState<Record<string, CalendarNote>>({});
@@ -20,20 +28,14 @@ export const FitnessCalendar: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
-  // Load notes for current user
-  const loadNotes = async () => {
-    if (!currentUser) return;
-    const allNotes = await calendarNoteService.getAllNotes(currentUser.id);
+  // Sync notes directly from DataContext's real-time cloud snapshot
+  useEffect(() => {
     const map: Record<string, CalendarNote> = {};
-    allNotes.forEach((n) => {
+    calendarNotes.forEach((n) => {
       map[n.date] = n;
     });
     setNotes(map);
-  };
-
-  useEffect(() => {
-    loadNotes();
-  }, [currentUser]);
+  }, [calendarNotes]);
 
   // Calendar calculations
   const year = currentDate.getFullYear();
@@ -92,8 +94,7 @@ export const FitnessCalendar: React.FC = () => {
     const weightNum = quickWeight.trim() ? parseFloat(quickWeight) : undefined;
     const activityStr = quickActivity.trim() || undefined;
 
-    await calendarNoteService.saveNote(
-      currentUser.id,
+    await saveCalendarNote(
       selectedDate,
       noteText.trim(),
       weightNum,
@@ -111,7 +112,6 @@ export const FitnessCalendar: React.FC = () => {
       await refreshData();
     }
 
-    await loadNotes();
     setIsSaving(false);
     setSaveSuccessMsg('Note saved successfully!');
     setTimeout(() => setSaveSuccessMsg(''), 2500);
@@ -120,8 +120,7 @@ export const FitnessCalendar: React.FC = () => {
   const handleDeleteNote = async () => {
     if (!currentUser || !selectedDate || !notes[selectedDate]) return;
     if (confirm('Delete note for this date?')) {
-      await calendarNoteService.deleteNote(currentUser.id, notes[selectedDate].id);
-      await loadNotes();
+      await deleteCalendarNote(notes[selectedDate].id);
       setSelectedDate(null);
     }
   };

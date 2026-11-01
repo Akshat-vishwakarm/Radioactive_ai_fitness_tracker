@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../../context/AuthContext';
-import { focusDeadlineService } from '../../services/focusDeadlineService';
+import { useData } from '../../context/DataContext';
 import type { FocusDeadline } from '../../types';
 
 interface TimeRemaining {
@@ -32,7 +32,7 @@ function calculateTimeRemaining(targetIso: string): TimeRemaining {
 
 export const FocusDeadlineTimer: React.FC<{ onDeadlineChange?: () => void }> = ({ onDeadlineChange }) => {
   const { currentUser } = useAuth();
-  const [activeDeadline, setActiveDeadline] = useState<FocusDeadline | null>(null);
+  const { activeDeadline, setFocusDeadline, completeFocusDeadline } = useData();
   const [timeRemaining, setTimeRemaining] = useState<TimeRemaining | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeepFocusMode, setIsDeepFocusMode] = useState(false);
@@ -44,21 +44,14 @@ export const FocusDeadlineTimer: React.FC<{ onDeadlineChange?: () => void }> = (
   const [category, setCategory] = useState<FocusDeadline['category']>('fitness');
   const [targetNote, setTargetNote] = useState('');
 
-  // Load active deadline
-  const loadActiveDeadline = async () => {
-    if (!currentUser) return;
-    const deadline = await focusDeadlineService.getActiveDeadline(currentUser.id);
-    setActiveDeadline(deadline);
-    if (deadline) {
-      setTimeRemaining(calculateTimeRemaining(deadline.target_date));
+  // Update time remaining whenever activeDeadline updates (live from onSnapshot)
+  useEffect(() => {
+    if (activeDeadline) {
+      setTimeRemaining(calculateTimeRemaining(activeDeadline.target_date));
     } else {
       setTimeRemaining(null);
     }
-  };
-
-  useEffect(() => {
-    loadActiveDeadline();
-  }, [currentUser]);
+  }, [activeDeadline]);
 
   // Non-stop live ticker ticking every second
   useEffect(() => {
@@ -77,7 +70,7 @@ export const FocusDeadlineTimer: React.FC<{ onDeadlineChange?: () => void }> = (
     if (!currentUser || !title || !targetDate) return;
 
     const fullIso = `${targetDate}T${targetTime || '23:59'}:00`;
-    await focusDeadlineService.setDeadline(currentUser.id, {
+    await setFocusDeadline({
       title,
       target_date: fullIso,
       category,
@@ -85,7 +78,6 @@ export const FocusDeadlineTimer: React.FC<{ onDeadlineChange?: () => void }> = (
     });
 
     setIsModalOpen(false);
-    await loadActiveDeadline();
     if (onDeadlineChange) onDeadlineChange();
   };
 
@@ -96,16 +88,14 @@ export const FocusDeadlineTimer: React.FC<{ onDeadlineChange?: () => void }> = (
       spread: 70,
       origin: { y: 0.6 },
     });
-    await focusDeadlineService.completeDeadline(currentUser.id, activeDeadline.id);
-    await loadActiveDeadline();
+    await completeFocusDeadline(activeDeadline.id);
     if (onDeadlineChange) onDeadlineChange();
   };
 
   const handleClear = async () => {
     if (!activeDeadline || !currentUser) return;
     if (confirm('Reset this focus deadline?')) {
-      await focusDeadlineService.deleteDeadline(currentUser.id, activeDeadline.id);
-      await loadActiveDeadline();
+      await completeFocusDeadline(activeDeadline.id);
       if (onDeadlineChange) onDeadlineChange();
     }
   };

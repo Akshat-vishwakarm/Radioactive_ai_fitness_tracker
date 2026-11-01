@@ -10,6 +10,10 @@ import type {
   Goal,
   MLConfig,
   MLPredictionResult,
+  CalendarNote,
+  FocusDeadline,
+  UserPreferences,
+  PersonalRecords,
 } from '../types';
 import { habitService } from '../services/habitService';
 import { workoutService } from '../services/workoutService';
@@ -17,6 +21,8 @@ import { nutritionService } from '../services/nutritionService';
 import { progressService } from '../services/progressService';
 import { goalService } from '../services/goalService';
 import { mlService } from '../services/ml/mlService';
+import { calendarNoteService } from '../services/calendarNoteService';
+import { focusDeadlineService } from '../services/focusDeadlineService';
 import { firestoreService } from '../services/firestoreService';
 import { formatLocalDate } from '../utils/dateUtils';
 
@@ -34,11 +40,32 @@ interface DataContextType {
   progressEntries: ProgressEntry[];
   latestWeight: number | null;
   goals: Goal[];
+  calendarNotes: CalendarNote[];
+  focusDeadlines: FocusDeadline[];
+  activeDeadline: FocusDeadline | null;
+  userPreferences: UserPreferences | null;
+  personalRecords: PersonalRecords | null;
   mlConfig: MLConfig | null;
   mlPrediction: MLPredictionResult | null;
   refreshData: () => Promise<void>;
   toggleHabit: (habitId: string, dateStr: string) => Promise<boolean>;
   clearAllCompletions: () => Promise<void>;
+  savePreferences: (updates: Partial<UserPreferences>) => Promise<UserPreferences>;
+  saveCalendarNote: (
+    date: string,
+    noteText: string,
+    weight?: number,
+    activity?: string,
+    tags?: string[]
+  ) => Promise<CalendarNote>;
+  deleteCalendarNote: (id: string) => Promise<void>;
+  setFocusDeadline: (data: {
+    title: string;
+    target_date: string;
+    category?: FocusDeadline['category'];
+    target_note?: string;
+  }) => Promise<FocusDeadline>;
+  completeFocusDeadline: (id: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -66,6 +93,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [latestWeight, setLatestWeight] = useState<number | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [calendarNotes, setCalendarNotes] = useState<CalendarNote[]>([]);
+  const [focusDeadlines, setFocusDeadlines] = useState<FocusDeadline[]>([]);
+  const [activeDeadline, setActiveDeadline] = useState<FocusDeadline | null>(null);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
+  const [personalRecords, setPersonalRecords] = useState<PersonalRecords | null>(null);
   const [mlConfig, setMlConfig] = useState<MLConfig | null>(null);
   const [mlPrediction, setMlPrediction] = useState<MLPredictionResult | null>(null);
 
@@ -84,6 +116,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProgressEntries([]);
       setLatestWeight(null);
       setGoals([]);
+      setCalendarNotes([]);
+      setFocusDeadlines([]);
+      setActiveDeadline(null);
+      setUserPreferences(null);
+      setPersonalRecords(null);
       setMlConfig(null);
       setMlPrediction(null);
       setLoading(false);
@@ -106,6 +143,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fetchedProgress,
         fetchedWeight,
         fetchedGoals,
+        fetchedNotes,
+        fetchedDeadlines,
+        activeDl,
+        fetchedPrefs,
+        fetchedPR,
         fetchedMLConfig,
         fetchedMLPrediction,
       ] = await Promise.all([
@@ -120,6 +162,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         progressService.getProgressEntries(userId),
         progressService.getLatestWeight(userId),
         goalService.getGoals(userId),
+        calendarNoteService.getAllNotes(userId),
+        focusDeadlineService.getAllDeadlines(userId),
+        focusDeadlineService.getActiveDeadline(userId),
+        firestoreService.getPreferences(userId),
+        firestoreService.getPersonalRecords(userId),
         mlService.getMLConfig(userId),
         mlService.getInsights(userId),
       ]);
@@ -136,6 +183,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProgressEntries(fetchedProgress);
       setLatestWeight(fetchedWeight);
       setGoals(fetchedGoals);
+      setCalendarNotes(fetchedNotes);
+      setFocusDeadlines(fetchedDeadlines);
+      setActiveDeadline(activeDl);
+      setUserPreferences(fetchedPrefs);
+      setPersonalRecords(fetchedPR);
       setMlConfig(fetchedMLConfig);
       setMlPrediction(fetchedMLPrediction);
     } catch (err) {
@@ -160,6 +212,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProgressEntries([]);
       setLatestWeight(null);
       setGoals([]);
+      setCalendarNotes([]);
+      setFocusDeadlines([]);
+      setActiveDeadline(null);
+      setUserPreferences(null);
+      setPersonalRecords(null);
       setMlConfig(null);
       setMlPrediction(null);
       setLoading(false);
@@ -169,12 +226,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userId = currentUser.id;
     setLoading(true);
 
-    // 1. One-time upload of any local records that haven't reached cloud yet
+    // 1. One-time upload of any pre-existing local records that haven't reached cloud yet
     firestoreService.migrateLocalDataToCloud(userId).catch((err) => {
-      console.warn('migrateLocalDataToCloud non-critical error:', err);
+      console.warn('migrateLocalDataToCloud non-critical notice:', err);
     });
 
-    // 2. Initial load from local/cache for immediate responsiveness
+    // 2. Initial load from local/cache for instant responsiveness
     refreshData();
 
     // 3. Real-time multi-device Firestore onSnapshot subscriptions
@@ -292,6 +349,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setGoals(data.goals);
       }
 
+      // Calendar Notes
+      if (data.calendarNotes !== undefined) {
+        setCalendarNotes(data.calendarNotes);
+      }
+
+      // Focus Deadlines
+      if (data.focusDeadlines !== undefined) {
+        setFocusDeadlines(data.focusDeadlines);
+        const activeList = data.focusDeadlines.filter((d) => d.active);
+        if (activeList.length > 0) {
+          setActiveDeadline(activeList.sort((a, b) => a.target_date.localeCompare(b.target_date))[0]);
+        } else {
+          setActiveDeadline(null);
+        }
+      }
+
+      // User Preferences
+      if (data.preferences !== undefined) {
+        setUserPreferences(data.preferences);
+      }
+
+      // Personal Records
+      if (data.personalRecords !== undefined) {
+        setPersonalRecords(data.personalRecords);
+      }
+
       // Once initial snapshot arrives, dismiss loading screen
       setLoading(false);
     });
@@ -319,6 +402,55 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCompletionsMap({});
   };
 
+  const savePreferences = async (updates: Partial<UserPreferences>): Promise<UserPreferences> => {
+    if (!currentUser) throw new Error('Not authenticated');
+    const updated = await firestoreService.savePreferences(currentUser.id, updates);
+    setUserPreferences(updated);
+    return updated;
+  };
+
+  const saveCalendarNote = async (
+    date: string,
+    noteText: string,
+    weight?: number,
+    activity?: string,
+    tags?: string[]
+  ): Promise<CalendarNote> => {
+    if (!currentUser) throw new Error('Not authenticated');
+    const note = await calendarNoteService.saveNote(currentUser.id, date, noteText, weight, activity, tags);
+    setCalendarNotes((prev) => {
+      const filtered = prev.filter((n) => n.date !== date);
+      return [...filtered, note];
+    });
+    return note;
+  };
+
+  const deleteCalendarNote = async (id: string): Promise<void> => {
+    if (!currentUser) return;
+    await calendarNoteService.deleteNote(currentUser.id, id);
+    setCalendarNotes((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const setFocusDeadline = async (data: {
+    title: string;
+    target_date: string;
+    category?: FocusDeadline['category'];
+    target_note?: string;
+  }): Promise<FocusDeadline> => {
+    if (!currentUser) throw new Error('Not authenticated');
+    const created = await focusDeadlineService.setDeadline(currentUser.id, data);
+    setActiveDeadline(created);
+    setFocusDeadlines((prev) => [created, ...prev.map((d) => ({ ...d, active: false }))]);
+    return created;
+  };
+
+  const completeFocusDeadline = async (id: string): Promise<void> => {
+    if (!currentUser) return;
+    await focusDeadlineService.completeDeadline(currentUser.id, id);
+    setActiveDeadline(null);
+    setFocusDeadlines((prev) => prev.map((d) => (d.id === id ? { ...d, active: false } : d)));
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -335,11 +467,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         progressEntries,
         latestWeight,
         goals,
+        calendarNotes,
+        focusDeadlines,
+        activeDeadline,
+        userPreferences,
+        personalRecords,
         mlConfig,
         mlPrediction,
         refreshData,
         toggleHabit,
         clearAllCompletions,
+        savePreferences,
+        saveCalendarNote,
+        deleteCalendarNote,
+        setFocusDeadline,
+        completeFocusDeadline,
       }}
     >
       {children}

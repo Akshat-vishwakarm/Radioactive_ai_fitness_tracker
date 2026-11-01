@@ -26,6 +26,8 @@ import type {
   Goal,
   CalendarNote,
   FocusDeadline,
+  UserPreferences,
+  PersonalRecords,
 } from '../types';
 
 export interface UserCloudData {
@@ -40,6 +42,8 @@ export interface UserCloudData {
   goals: Goal[];
   calendarNotes: CalendarNote[];
   focusDeadlines: FocusDeadline[];
+  preferences: UserPreferences | null;
+  personalRecords: PersonalRecords | null;
 }
 
 export const firestoreService = {
@@ -271,6 +275,46 @@ export const firestoreService = {
       unsubs.push(unsubDeadlines);
     } catch (e) {
       console.warn('[Firestore Sync] Failed to attach focus deadlines listener:', e);
+    }
+
+    // 11. User Preferences real-time listener
+    try {
+      const unsubPrefs = onSnapshot(
+        this.getUserCol(uid, 'preferences'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const docData = snapshot.docs[0];
+            const preferences = { id: docData.id, ...docData.data() } as UserPreferences;
+            onDataUpdated({ preferences });
+          } else {
+            onDataUpdated({ preferences: null });
+          }
+        },
+        (err) => console.warn('[Firestore Sync] Preferences listener error:', err)
+      );
+      unsubs.push(unsubPrefs);
+    } catch (e) {
+      console.warn('[Firestore Sync] Failed to attach preferences listener:', e);
+    }
+
+    // 12. Personal Records real-time listener
+    try {
+      const unsubPR = onSnapshot(
+        this.getUserCol(uid, 'personalRecords'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const docData = snapshot.docs[0];
+            const personalRecords = { id: docData.id, ...docData.data() } as PersonalRecords;
+            onDataUpdated({ personalRecords });
+          } else {
+            onDataUpdated({ personalRecords: null });
+          }
+        },
+        (err) => console.warn('[Firestore Sync] Personal records listener error:', err)
+      );
+      unsubs.push(unsubPR);
+    } catch (e) {
+      console.warn('[Firestore Sync] Failed to attach personal records listener:', e);
     }
 
     // Return combined cleanup function
@@ -782,5 +826,109 @@ export const firestoreService = {
   async deleteFocusDeadline(uid: string, id: string): Promise<void> {
     await deleteDoc(doc(firestoreDb, 'users', uid, 'focusDeadlines', id));
     await db.focusDeadlines.delete(id).catch(() => {});
+  },
+
+  // User Preferences
+  async getPreferences(uid: string): Promise<UserPreferences> {
+    const defaultPrefs: UserPreferences = {
+      id: `pref_${uid}`,
+      user_id: uid,
+      unit_system: 'metric',
+      theme: 'monochrome',
+      daily_water_target_ml: 2500,
+      daily_calorie_target: 2200,
+      deep_focus_mode: false,
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      const docRef = doc(firestoreDb, 'users', uid, 'preferences', `pref_${uid}`);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return { ...defaultPrefs, ...snap.data() } as UserPreferences;
+      }
+    } catch {
+      // offline fallback
+    }
+    return defaultPrefs;
+  },
+
+  async savePreferences(uid: string, updates: Partial<UserPreferences>): Promise<UserPreferences> {
+    const docRef = doc(firestoreDb, 'users', uid, 'preferences', `pref_${uid}`);
+    const current = await this.getPreferences(uid);
+    const updated: UserPreferences = {
+      ...current,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    await setDoc(docRef, updated, { merge: true }).catch(() => {});
+    return updated;
+  },
+
+  // Personal Records
+  async getPersonalRecords(uid: string): Promise<PersonalRecords> {
+    const defaultPR: PersonalRecords = {
+      id: `pr_${uid}`,
+      user_id: uid,
+      best_streak: 0,
+      highest_workout_volume: 0,
+      max_weight_lifted: 0,
+      lowest_weight: null,
+      highest_weight: null,
+      total_workouts: 0,
+      total_meals: 0,
+      total_habit_completions: 0,
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      const docRef = doc(firestoreDb, 'users', uid, 'personalRecords', `pr_${uid}`);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return { ...defaultPR, ...snap.data() } as PersonalRecords;
+      }
+    } catch {
+      // offline fallback
+    }
+    return defaultPR;
+  },
+
+  async savePersonalRecords(uid: string, updates: Partial<PersonalRecords>): Promise<PersonalRecords> {
+    const docRef = doc(firestoreDb, 'users', uid, 'personalRecords', `pr_${uid}`);
+    const current = await this.getPersonalRecords(uid);
+    const updated: PersonalRecords = {
+      ...current,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    await setDoc(docRef, updated, { merge: true }).catch(() => {});
+    return updated;
+  },
+
+  // Full User Account Reset (Propagates across all devices)
+  async clearUserData(uid: string): Promise<void> {
+    const subcollections = [
+      'habits',
+      'habitCompletions',
+      'workoutPlans',
+      'workoutLogs',
+      'nutritionGoals',
+      'mealEntries',
+      'progressEntries',
+      'goals',
+      'calendarNotes',
+      'focusDeadlines',
+      'preferences',
+      'personalRecords',
+    ];
+
+    for (const col of subcollections) {
+      try {
+        const snap = await getDocs(this.getUserCol(uid, col));
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref).catch(() => {});
+        }
+      } catch (err) {
+        console.warn(`[Firestore] clearUserData error on ${col}:`, err);
+      }
+    }
   },
 };

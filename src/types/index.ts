@@ -186,6 +186,31 @@ export interface CalendarNote {
   updated_at: string;
 }
 
+export interface UserPreferences {
+  id?: string;
+  user_id: string;
+  unit_system: 'metric' | 'imperial';
+  theme: 'monochrome' | 'dark' | 'light';
+  daily_water_target_ml: number;
+  daily_calorie_target: number;
+  deep_focus_mode: boolean;
+  updated_at: string;
+}
+
+export interface PersonalRecords {
+  id?: string;
+  user_id: string;
+  best_streak: number;
+  highest_workout_volume: number;
+  max_weight_lifted: number;
+  lowest_weight: number | null;
+  highest_weight: number | null;
+  total_workouts: number;
+  total_meals: number;
+  total_habit_completions: number;
+  updated_at: string;
+}
+
 export interface MLConfig {
   id: string;
   user_id: string;
