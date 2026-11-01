@@ -18,7 +18,7 @@ export const ProgressPage: React.FC = () => {
 
   const handleDeleteEntry = async (id: string) => {
     if (confirm('Delete progress entry?')) {
-      await progressService.deleteProgressEntry(id);
+      await progressService.deleteProgressEntry(id, currentUser?.id);
       await refreshData();
     }
   };

@@ -38,7 +38,7 @@ export const NutritionPage: React.FC = () => {
 
   const handleDeleteMeal = async (mealId: string) => {
     if (confirm('Remove meal entry?')) {
-      await nutritionService.deleteMealEntry(mealId);
+      await nutritionService.deleteMealEntry(mealId, currentUser?.id);
       await refreshData();
     }
   };

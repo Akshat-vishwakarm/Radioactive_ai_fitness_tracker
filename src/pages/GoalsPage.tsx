@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { goalService } from '../services/goalService';
 import { GoalModal } from '../components/goals/GoalModal';
 import { EmptyState } from '../components/common/EmptyState';
@@ -8,6 +9,7 @@ import type { Goal } from '../types';
 
 export const GoalsPage: React.FC = () => {
   const { goals, refreshData } = useData();
+  const { currentUser } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleSaveGoal = async (goalData: Omit<Goal, 'id' | 'created_at' | 'status'>) => {
@@ -17,7 +19,7 @@ export const GoalsPage: React.FC = () => {
 
   const handleDeleteGoal = async (id: string) => {
     if (confirm('Delete this goal?')) {
-      await goalService.deleteGoal(id);
+      await goalService.deleteGoal(id, currentUser?.id);
       await refreshData();
     }
   };
